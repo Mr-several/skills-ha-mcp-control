@@ -23,11 +23,10 @@ python3 "$CODEX_HOME/skills/.system/skill-installer/scripts/install-skill-from-g
 
 ## 更新到最新版本
 
-安装脚本默认不会覆盖同名目录。更新时建议先删除旧版本再重装：
+运行自带的更新脚本即可一键更新（自动备份旧版本、下载替换、失败回滚）：
 
 ```bash
-rm -rf "$CODEX_HOME/skills/skills-ha-mcp-control"
-python3 "$CODEX_HOME/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
-  --repo Mr-several/skills-ha-mcp-control \
-  --path .
+bash "$CODEX_HOME/skills/skills-ha-mcp-control/scripts/update.sh"
 ```
+
+更新完成后重启 Codex 以加载新版本。

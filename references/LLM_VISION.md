@@ -57,11 +57,37 @@ structure: >
 
 ## 自动化设计模式
 
-### 方案 A：简单触发
+**默认使用方案 A，不要询问用户选择哪种方案或"多久获取一次画面"。** 仅当用户明确要求持续监测（如"一直盯着""持续检测"）时才使用方案 B。
 
-适合"有人出现时分析一次"的场景。
+### 方案 A：传感器触发 + 条件冷却（默认）
 
-流程：触发器传感器从 off -> on → 调用 `llmvision.stream_analyzer` → 模型返回结果 → 命中后播报和通知。
+默认方案。传感器检测到活动时触发分析，仅在命中目标行为后才进入冷却。
+
+流程：触发器传感器从 off -> on → 调用 `llmvision.stream_analyzer` → 判断是否命中 → 命中则播报/通知 + 冷却，未命中则立即结束（下次传感器触发可马上再分析）。
+
+冷却逻辑：使用 `mode: single` + 在命中分支内添加 `delay`（默认 5 分钟）。冷却只在命中后生效，未命中时不冷却。用户未指定冷却时间时不要询问，直接使用默认值。
+
+actions 结构示意：
+
+```yaml
+actions:
+  - action: llmvision.stream_analyzer
+    data: ...
+    response_variable: vision_result
+  - if:
+      - condition: template
+        value_template: "{{ vision_result.response_text is defined and ... == true }}"
+    then:
+      - action: notify.send_message  # 音箱播报
+        ...
+      - event: notify_openclaw_agent  # 通知用户
+        ...
+      - delay:
+          minutes: 5  # 命中后冷却，防止反复提醒
+mode: single
+```
+
+关键点：`delay` 放在 `if.then` 内部，只有命中行为时才冷却。未命中时自动化立即结束，传感器下次触发可以马上再次分析。
 
 创建前需通过 `ha_search_entities` 搜索摄像头关联的传感器，按以下优先级选择触发器：
 
@@ -72,12 +98,9 @@ structure: >
 
 不同摄像头的传感器命名差异较大，不要假设固定名称，始终搜索后再决定。
 
-优点：简单、token 消耗低（使用传感器触发时）。
-缺点：人一直在原地不动时，传感器不一定会反复触发；定时轮询模式下 token 消耗较高。
+### 方案 B：高频检测 + 低频复查（仅限用户明确要求持续监测）
 
-### 方案 B：高频检测 + 低频复查
-
-适合"持续坐在电脑前 / 持续玩手机"等需要持续监测的场景。
+仅当用户明确要求持续监测（如"一直盯着看有没有玩手机""持续检测是否在看电脑"）时使用。**用户没有提持续监测时，不要主动推荐此方案，也不要询问用户是否需要。**
 
 配合 `input_boolean` 实现冷却控制，需要两条自动化配合：
 
@@ -139,9 +162,10 @@ message: >
 4. 先用次码流，小参数版本（duration:4, max_frames:2, target_width:960）
 5. 让模型返回 JSON
 6. 用模板条件判断命中
-7. 音箱播报和 OpenClaw 通知分别配置（规则见 `references/CONTROL.md`）
-8. 根据场景选择设计模式（方案 A 或 B）
-9. 观察 HA 日志，重点看触发器是否触发、LLM Vision 是否抓到帧、摄像头流是否报错
+7. 用 `if/then` 条件分支：命中行为时播报 + 通知 + 冷却（默认 5 分钟），未命中时不做任何事
+8. 音箱播报和 OpenClaw 通知放在 `if.then` 内部（规则见 `references/CONTROL.md`）
+9. 直接创建，不要询问用户"多久获取一次画面"或"选择方案 A 还是 B"
+10. 观察 HA 日志，重点看触发器是否触发、LLM Vision 是否抓到帧、摄像头流是否报错
 
 ## 命名规范
 

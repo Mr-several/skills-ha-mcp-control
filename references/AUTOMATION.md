@@ -2,19 +2,17 @@
 
 用于创建、更新、读取和删除 Home Assistant 自动化。
 
-## 关键工具事实
-
-- 当前服务不支持 `ha_automation_create`。
-- 当前服务不支持 `ha_create_automation`。
-- 创建和更新自动化统一使用 `ha_config_set_automation`。
+涉及摄像头画面感知、人体姿势/手势识别等视觉分析场景，同时参考 `references/LLM_VISION.md`。
 
 ## 工具清单
 
-- 读取自动化：`ha_config_get_automation`
 - 创建/更新自动化：`ha_config_set_automation`
+- 读取自动化：`ha_config_get_automation`
 - 删除自动化：`ha_config_remove_automation`
 
-## 禁止模式（必须遵守，违反将产生错误的自动化）
+注意：当前服务不支持 `ha_automation_create` 和 `ha_create_automation`，这些名称不存在。
+
+## 禁止模式
 
 ### 禁止 1：禁止使用 `action: event.fire` 发送 OpenClaw 通知
 
@@ -45,22 +43,7 @@ actions:
 
 ### 禁止 2：禁止对小米音箱使用 `media_player.play_media` + `announce` 播报文字
 
-错误写法：
-
-```yaml
-# 错误！禁止这样写！
-actions:
-  - target:
-      entity_id: media_player.xiaomi_cn_2085725100_oh2p
-    data:
-      media:
-        media_content_id: 欢迎回家
-        media_content_type: announce
-        metadata: {}
-    action: media_player.play_media
-```
-
-正确写法：
+必须使用 `notify.send_message` + `target.device_id`：
 
 ```yaml
 actions:
@@ -71,23 +54,17 @@ actions:
       message: 欢迎回家
 ```
 
+完整的正确/错误写法对比见 `references/CONTROL.md` 的"小米音箱播报"章节。
+
 ### 禁止 3：禁止使用 HA 原生通知服务通知用户
 
-禁止在自动化中使用以下服务向用户发送通知：
+禁止在自动化中使用 `notify.notify`、`notify.mobile_app_xxx`、`notify.feishu`、`persistent_notification.create` 等 HA 原生通知服务。
 
-- `notify.notify`
-- `notify.mobile_app_xxx`
-- `notify.feishu`
-- `persistent_notification.create`
-- 任何其他 HA 原生通知服务
+所有面向用户的通知必须走 OpenClaw 事件。唯一例外：用户明确指定了某个 HA 原生通知渠道。
 
-所有面向用户的通知必须走 OpenClaw 事件。
+## HA 自动化动作类型
 
-唯一例外：用户明确指定了某个 HA 原生通知渠道。
-
-## HA 自动化动作类型参考（必须理解）
-
-### 类型 1：服务调用（控制设备）
+### 服务调用（控制设备）
 
 ```yaml
 - action: notify.send_message
@@ -97,13 +74,7 @@ actions:
     message: 欢迎回家
 ```
 
-对应 mcporter JSON：
-
-```json
-{"action":"notify.send_message","target":{"device_id":"xxx"},"data":{"message":"欢迎回家"}}
-```
-
-### 类型 2：事件触发（通知 OpenClaw）
+### 事件触发（通知 OpenClaw）
 
 ```yaml
 - event: notify_openclaw_agent
@@ -113,15 +84,9 @@ actions:
     automation: xxx
 ```
 
-对应 mcporter JSON：
-
-```json
-{"event":"notify_openclaw_agent","event_data":{"message":"...","source":"ha_automation","automation":"xxx"}}
-```
-
 关键区别：服务调用用 `action:`，事件触发用 `event:`，二者不可互换。
 
-## 必须遵循的创建流程
+## 创建流程
 
 1. 收到请求后第一步先用 `ha_search_entities` 搜索相关实体，不先输出计划说明。
    - 触发源搜索至少一次：`query:'摄像头'` 或 `query:'人体'`，并结合 `domain_filter:binary_sensor,camera`。
@@ -138,24 +103,24 @@ actions:
 
 ## 标准交互示例
 
-### 用户输入
+用户输入：
 
 > 当感应到有人的时候使用音箱播放"欢迎你"，打开开关，然后再通知我
 
-### 正确做法
+正确做法：
 
 第一步：搜索实体（调用工具，不要输出任何内容）
 
 - 搜索人体传感器
 - 搜索音箱/媒体播放器
 - 搜索开关/插座
-- 对音箱实体调用 `ha_get_device` 获取 `device_id`（播报需要 `device_id`）
+- 对音箱实体调用 `ha_get_device` 获取 `device_id`
 
 第二步：若有歧义，先给出默认候选并向用户确认
 
 > 我准备为你创建自动化：
 >
-> 当客厅的人体传感器检测到有人时，用客厅小米音箱 Pro 播放“欢迎你”，打开客厅的米家插座3，并通知你。
+> 当客厅的人体传感器检测到有人时，用客厅小米音箱 Pro 播放"欢迎你"，打开客厅的米家插座3，并通知你。
 >
 > 你家有多个音箱，我默认用客厅那台，可以吗？确认后我就帮你创建。
 
@@ -163,26 +128,10 @@ actions:
 
 - 若匹配无歧义，可直接创建，但创建完成后仍需周知用户本次匹配与执行结果。
 
-## “通知用户”与“设备播报”必须严格区分
-
-- 通知用户（用户说“通知我/提醒我/告诉我”）：
-  - 使用 OpenClaw 回调事件（默认 `notify_openclaw_agent`，特殊语义用 `notify_openclaw_direct`）。
-  - 不使用 `notify.notify`、`notify.feishu`、`notify.mobile_app_xxx` 等 HA 原生通知服务。
-
-- 设备播报（用户说“用音箱播放/播报”）：
-  - 小米音箱使用 `notify.send_message`，并传 `target.device_id` 与消息内容。
-  - 不使用 `tts.speak`。
-  - 先搜索音箱实体，再用 `ha_get_device` 获取 `device_id`。
-
-- 音乐播放（用户说“播放音乐/放歌/暂停/下一首/音量”）：
-  - 有明确媒体内容时，优先 `media_player.play_media`。
-  - 无明确媒体内容但要恢复播放时，使用 `media_player.media_play`。
-  - 不要用 `notify.send_message` 承载播放音乐意图。
-
 ## OpenClaw 回调事件策略
 
 - 默认事件：`notify_openclaw_agent`（V2）。
-- 仅当用户要求“原文不改写/一字不差”或明确要求 V1 时，使用 `notify_openclaw_direct`（V1）。
+- 仅当用户要求"原文不改写/一字不差"或明确要求 V1 时，使用 `notify_openclaw_direct`（V1）。
 - 仅当用户明确要求 V1+V2 兼容时，才同时创建双事件。
 - 双事件时顺序固定：`notify_openclaw_direct` -> `notify_openclaw_agent`。
 - 事件数据最小字段：
@@ -199,7 +148,7 @@ actions:
 
 ## 冷却时间 / 防频繁触发
 
-用户要求“X 分钟内只触发一次”时，使用 `mode: single` + 末尾 `delay:` 实现：
+用户要求"X 分钟内只触发一次"时，使用 `mode: single` + 末尾 `delay:` 实现：
 
 ```yaml
 actions:
@@ -220,9 +169,11 @@ mode: single
 
 如果用户没有要求防频繁触发，不需要加 `delay`，仅保留 `mode: single` 即可。
 
-## 创建示例 A（默认仅 V2）
+## 创建示例
 
-YAML 示例：
+### 完整示例（默认 V2）
+
+YAML：
 
 ```yaml
 alias: 插座开启欢迎播报
@@ -240,70 +191,23 @@ actions:
 mode: single
 ```
 
-`mcporter` 命令（已归一化为 `trigger`/`action`）：
+mcporter 命令（已归一化为 `trigger`/`action`）：
 
 ```bash
 mcporter call server.ha_config_set_automation config:'{"alias":"插座开启欢迎播报","description":"插座打开时触发 OpenClaw V2 欢迎提醒","mode":"single","trigger":[{"platform":"state","entity_id":"switch.cuco_cn_2028625295_v3_on_p_2_1","to":"on"}],"action":[{"event":"notify_openclaw_agent","event_data":{"message":"主人已回家，请生成一句更自然的欢迎提醒（V2）","source":"ha_automation","automation":"插座开启欢迎播报"}}]}'
 ```
 
-## 创建示例 B（原文不改写，仅 V1）
+### 事件类型变体
 
-YAML 示例：
+上面示例使用 V2（默认）。其他变体只需替换 actions 中的事件部分：
 
-```yaml
-alias: 插座开启原文播报
-description: 插座打开时触发 OpenClaw V1 原文通知
-triggers:
-  - trigger: state
-    entity_id: switch.cuco_cn_2028625295_v3_on_p_2_1
-    to: "on"
-actions:
-  - event: notify_openclaw_direct
-    event_data:
-      message: 欢迎回家，祝你生活愉快（V1）
-      source: ha_automation
-      automation: 插座开启原文播报
-mode: single
-```
+| 场景 | 事件名 | message 示例 |
+|------|--------|-------------|
+| 默认（AI 润色后通知） | `notify_openclaw_agent` | 主人已回家，请生成一句更自然的欢迎提醒 |
+| 原文不改写 | `notify_openclaw_direct` | 欢迎回家，祝你生活愉快 |
+| V1+V2 兼容 | 先 `notify_openclaw_direct` 再 `notify_openclaw_agent` | 两个事件各自的 message |
 
-`mcporter` 命令：
-
-```bash
-mcporter call server.ha_config_set_automation config:'{"alias":"插座开启原文播报","description":"插座打开时触发 OpenClaw V1 原文通知","mode":"single","trigger":[{"platform":"state","entity_id":"switch.cuco_cn_2028625295_v3_on_p_2_1","to":"on"}],"action":[{"event":"notify_openclaw_direct","event_data":{"message":"欢迎回家，祝你生活愉快（V1）","source":"ha_automation","automation":"插座开启原文播报"}}]}'
-```
-
-## 创建示例 C（显式要求 V1 + V2 兼容）
-
-YAML 示例：
-
-```yaml
-alias: 插座开启欢迎播报
-description: 插座打开时通过小米音箱播报，并触发 OpenClaw V1/V2
-triggers:
-  - trigger: state
-    entity_id: switch.cuco_cn_2028625295_v3_on_p_2_1
-    to: "on"
-actions:
-  - event: notify_openclaw_direct
-    event_data:
-      message: 欢迎回家，祝你生活愉快（V1）
-      source: ha_automation
-      automation: 插座开启欢迎播报
-  - event: notify_openclaw_agent
-    event_data:
-      message: 主人已回家，请生成一句更自然的欢迎提醒（V2）
-      source: ha_automation
-      automation: 插座开启欢迎播报
-mode: single
-```
-
-`mcporter` 命令：
-
-```bash
-mcporter call server.ha_config_set_automation config:'{"alias":"插座开启欢迎播报","description":"插座打开时通过小米音箱播报，并触发 OpenClaw V1/V2","mode":"single","trigger":[{"platform":"state","entity_id":"switch.cuco_cn_2028625295_v3_on_p_2_1","to":"on"}],"action":[{"event":"notify_openclaw_direct","event_data":{"message":"欢迎回家，祝你生活愉快（V1）","source":"ha_automation","automation":"插座开启欢迎播报"}},{"event":"notify_openclaw_agent","event_data":{"message":"主人已回家，请生成一句更自然的欢迎提醒（V2）","source":"ha_automation","automation":"插座开启欢迎播报"}}]}'
-```
-
-## 更新示例
+## 更新自动化
 
 传入 `identifier` 和新 `config`：
 
@@ -311,7 +215,7 @@ mcporter call server.ha_config_set_automation config:'{"alias":"插座开启欢�
 mcporter call server.ha_config_set_automation identifier:automation.welcome_message config:'{"alias":"Welcome Message","trigger":[...],"action":[...]}'
 ```
 
-## 删除示例
+## 删除自动化
 
 ```bash
 mcporter call server.ha_config_remove_automation identifier:automation.welcome_message
@@ -335,21 +239,16 @@ mcporter call server.ha_config_get_automation identifier:automation.welcome_mess
 
 确认事件类型和 `event_data` 字段正确。
 
-## 完成态输出门槛（必须遵守）
+## 完成态输出门槛
 
-- 若未执行 `ha_config_set_automation`，禁止输出“已创建”“正在创建”“已生效”。
-- 若未执行或未通过 `ha_config_get_automation` 回读，禁止输出“创建成功”。
-- 上述任一步失败时，必须明确写出“尚未创建成功”，并给出下一步动作。
+- 若未执行 `ha_config_set_automation`，禁止输出"已创建""正在创建""已生效"。
+- 若未执行或未通过 `ha_config_get_automation` 回读，禁止输出"创建成功"。
+- 上述任一步失败时，必须明确写出"尚未创建成功"，并给出下一步动作。
 
-## 失败处理（必须执行）
+## 失败处理
 
 - 若出现 `Unknown tool`（尤其是 `ha_create_automation` / `ha_automation_create`）：
   1. 重新执行 `mcporter list server ha-mcp --schema`
   2. 改用 `ha_config_set_automation` 重试
-  3. 仅在写入和回读验证都成功后才可回复“创建成功”
-- 若写入失败（鉴权、连接、配置错误），必须明确告知“尚未创建成功”，并给出可直接粘贴的 YAML 兜底。
-
-## 面向用户的输出规范
-
-- 只使用房间名、设备名等自然语言描述。
-- 禁止展示 `entity_id`、`media_player.xxx`、`switch.xxx`、`automation.xxx` 等技术标识。
+  3. 仅在写入和回读验证都成功后才可回复"创建成功"
+- 若写入失败（鉴权、连接、配置错误），必须明确告知"尚未创建成功"，并给出可直接粘贴的 YAML 兜底。

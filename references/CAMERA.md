@@ -46,11 +46,11 @@ mcporter call server.ha_search_entities query:'摄像头' domain_filter:camera
 ```
 2. 若用户未指定高清，默认使用低码率预览：
 ```bash
-python3 scripts/get_camera_frame.py --entity-id camera.tp_ipc_minorstream
+python3 {baseDir}/scripts/get_camera_frame.py --entity-id camera.tp_ipc_minorstream
 ```
 3. 若用户要求高清：
 ```bash
-python3 scripts/get_camera_frame.py --entity-id camera.tp_ipc_mainstream
+python3 {baseDir}/scripts/get_camera_frame.py --entity-id camera.tp_ipc_mainstream
 ```
 
 ## 已知限制

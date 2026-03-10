@@ -30,7 +30,7 @@
 1. 先检查目标设备是否有原生控制服务（先 `ha_list_services`，再按设备 domain 调用）。
 2. 若存在原生控制服务，必须优先走原生控制，不先用文本通知或播报接口兜底。
 3. 对音箱类设备：
-   - “播放音乐/暂停/下一首/调音量”优先 `media_player.*`。
+   - "播放音乐/暂停/下一首/调音量"优先 `media_player.*`。
    - `notify.send_message` 只用于播报文本，不用于播放歌曲。
 
 ## 常用命令
@@ -50,14 +50,17 @@ mcporter call server.ha_call_service domain:switch service:turn_off data:'{"enti
 mcporter call server.ha_call_service domain:climate service:set_temperature data:'{"entity_id":"climate.bedroom_ac","temperature":24}'
 ```
 
-## 小米音箱播报（硬规则）
+## 小米音箱播报（硬规则，必须严格遵守）
 
-- 不要对小米音箱使用 `tts.speak`。
-- 不要对小米音箱使用 `media_player.play_media` + `media_content_type: announce`。
-- 必须使用 `notify.send_message`，并传 `target.device_id`。
-- 必须先通过 `ha_get_device entity_id:<speaker_entity_id>` 获取 `device_id`。
-- 本段仅用于“设备播报”，不用于“通知用户”。
-- 也不用于“播放歌曲/播放音乐”。
+**唯一正确方式：`notify.send_message` + `target.device_id`。**
+
+以下方式全部禁止，无论在实时控制还是自动化中：
+
+- 禁止使用设备专属 notify 服务（如 `notify.xiaomi_cn_xxx_play_text_xxx`）
+- 禁止使用 `tts.speak`
+- 禁止使用 `media_player.play_media` + `media_content_type: announce`
+
+必须先通过 `ha_get_device entity_id:<speaker_entity_id>` 获取 `device_id`，然后用 `notify.send_message` + `target.device_id` 播报。本段仅用于"设备播报"，不用于"通知用户"，也不用于"播放歌曲/播放音乐"。
 
 流程：
 
@@ -105,13 +108,20 @@ mcporter call server.ha_call_service domain:notify service:send_message data:'{"
       media_content_type: announce
 ```
 
+```yaml
+# 错误！禁止这样写！
+- data:
+    message: 欢迎回家
+  action: notify.xiaomi_cn_2085725100_oh2p_play_text_a_7_3
+```
+
 ## 小米音箱播放音乐（硬规则）
 
 - 优先用 `media_player` 的原生媒体控制。
-- 用户说“播放音乐/放歌”时：
+- 用户说"播放音乐/放歌"时：
   - 有明确媒体内容（歌曲名、URL、歌单）优先 `media_player.play_media`。
   - 无明确媒体内容但设备有历史队列时，使用 `media_player.media_play` 恢复播放。
-- 不要用 `notify.send_message` 承载“播放音乐”意图。
+- 不要用 `notify.send_message` 承载"播放音乐"意图。
 
 示例：
 

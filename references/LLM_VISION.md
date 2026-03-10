@@ -78,14 +78,22 @@ actions:
       - condition: template
         value_template: "{{ vision_result.response_text is defined and ... == true }}"
     then:
-      - action: notify.send_message  # 音箱播报
-        ...
+      - action: notify.send_message  # 音箱播报（必须用 notify.send_message + device_id）
+        target:
+          device_id: <通过 ha_get_device 获取>
+        data:
+          message: <播报内容>
       - event: notify_openclaw_agent  # 通知用户
-        ...
+        event_data:
+          message: ...
+          source: ha_automation
+          automation: ...
       - delay:
           minutes: 5  # 命中后冷却，防止反复提醒
 mode: single
 ```
+
+音箱播报必须使用 `notify.send_message` + `target.device_id`，禁止使用设备专属 notify 服务（如 `notify.xiaomi_cn_xxx_play_text_xxx`）。详见 `references/CONTROL.md`。
 
 关键点：`delay` 放在 `if.then` 内部，只有命中行为时才冷却。未命中时自动化立即结束，传感器下次触发可以马上再次分析。
 
@@ -162,7 +170,7 @@ message: >
 4. 先用次码流，小参数版本（duration:4, max_frames:2, target_width:960）
 5. 让模型返回 JSON
 6. 用模板条件判断命中
-7. 用 `if/then` 条件分支：命中行为时播报 + 通知 + 冷却（默认 5 分钟），未命中时不做任何事
+7. 用 `if/then` 条件分支：命中行为时播报 + 通知 + 冷却（默认 2 分钟），未命中时不做任何事
 8. 音箱播报和 OpenClaw 通知放在 `if.then` 内部（规则见 `references/CONTROL.md`）
 9. 直接创建，不要询问用户"多久获取一次画面"或"选择方案 A 还是 B"
 10. 观察 HA 日志，重点看触发器是否触发、LLM Vision 是否抓到帧、摄像头流是否报错

@@ -41,9 +41,9 @@ actions:
       automation: xxx
 ```
 
-### 禁止 2：禁止对小米音箱使用 `media_player.play_media` + `announce` 播报文字
+### 禁止 2：禁止对小米音箱使用错误的播报方式
 
-必须使用 `notify.send_message` + `target.device_id`：
+小米音箱播报**唯一正确写法**是 `notify.send_message` + `target.device_id`：
 
 ```yaml
 actions:
@@ -54,7 +54,13 @@ actions:
       message: 欢迎回家
 ```
 
-完整的正确/错误写法对比见 `references/CONTROL.md` 的"小米音箱播报"章节。
+以下写法全部禁止：
+
+- `action: notify.xiaomi_cn_xxx_play_text_xxx`（设备专属 notify 服务，禁止使用）
+- `action: media_player.play_media` + `media_content_type: announce`（禁止使用）
+- `action: tts.speak`（禁止使用）
+
+必须先通过 `ha_get_device` 获取音箱的 `device_id`，不要使用 `entity_id` 代替。完整规则见 `references/CONTROL.md` 的"小米音箱播报"章节。
 
 ### 禁止 3：禁止使用 HA 原生通知服务通知用户
 
@@ -91,7 +97,7 @@ actions:
 1. 收到请求后第一步先用 `ha_search_entities` 搜索相关实体，不先输出计划说明。
    - 触发源搜索至少一次：`query:'摄像头'` 或 `query:'人体'`，并结合 `domain_filter:binary_sensor,camera`。
    - 音箱搜索至少一次：`query:'音箱'`，并结合 `domain_filter:media_player`。
-   - 对音箱实体调用 `ha_get_device` 获取 `device_id`（播报需要 `device_id`）。
+   - 对音箱实体调用 `ha_get_device` 获取 `device_id`（播报必须使用 `notify.send_message` + `target.device_id`，禁止使用设备专属 notify 服务）。
 2. 匹配处理规则：
    - 无歧义（唯一且明显匹配）时，可直接选中该实体并继续创建。
    - 有歧义时，先选一个最可能的候选（基于房间名/设备名语义），再用自然语言设备名让用户确认后写入。
